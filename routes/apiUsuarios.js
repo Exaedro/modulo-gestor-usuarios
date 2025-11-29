@@ -6,8 +6,12 @@ const isAdmin = require('../middlewares/authMiddleware');
 // GET /api/usuarios - List all users
 router.get('/', async (req, res) => {
     try {
-        const users = await userService.getAll();
-        res.json(users);
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 5;
+        const search = req.query.q || '';
+
+        const result = await userService.getAll(page, limit, search);
+        res.json(result);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Error al obtener usuarios' });

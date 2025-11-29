@@ -197,6 +197,76 @@
             color: #dc2626;
             font-size: 1rem;
         }
+
+        .controls-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+
+        .search-box {
+            flex: 1;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px;
+            padding-left: 40px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 0.9375rem;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+        }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: center;
+            padding: 20px;
+            border-top: 1px solid #f1f5f9;
+        }
+
+        .page-btn {
+            padding: 8px 16px;
+            border: 1px solid #e5e7eb;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #64748b;
+            transition: all 0.2s ease;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            background: #f8fafc;
+            color: #1e40af;
+            border-color: #1e40af;
+        }
+
+        .page-btn:disabled {
+            background: #f1f5f9;
+            color: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            color: #64748b;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 
@@ -211,6 +281,16 @@
             <div class="card-header">
                 <h2>Listado de Usuarios</h2>
                 <span class="badge" id="userCount">Cargando...</span>
+            </div>
+
+            <div style="padding: 20px 30px 0;">
+                <div class="controls-container">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="searchInput" class="search-input"
+                            placeholder="Buscar por nombre, email, rol...">
+                    </div>
+                </div>
             </div>
 
             <div id="loading" class="loading">
@@ -231,46 +311,110 @@
                 </tbody>
             </table>
 
+            <div class="pagination" id="paginationControls" style="display:none;">
+                <button class="page-btn" id="prevBtn" onclick="changePage(-1)">Anterior</button>
+                <span class="page-info">Página <span id="currentPage">1</span> de <span id="totalPages">1</span></span>
+                <button class="page-btn" id="nextBtn" onclick="changePage(1)">Siguiente</button>
+            </div>
+
             <div id="errorMessage" class="error-message" style="display:none;"></div>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                const response = await fetch('/api/usuarios');
-                if (!response.ok) throw new Error('Error al cargar usuarios');
-                const users = await response.json();
+        let currentPage = 1;
+        let totalPages = 1;
+        let searchTimeout;
 
-                const tbody = document.getElementById('usersBody');
-                users.forEach(user => {
-                    const roleClass = `role-${user.rol}`;
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td><strong>#${user.id}</strong></td>
-                        <td>
-                            <div class="user-name">${user.nombres} ${user.apellidos}</div>
-                            <div class="user-email">${user.email}</div>
-                        </td>
-                        <td><span class="role-badge ${roleClass}">${user.rol}</span></td>
-                        <td>
-                            <a href="/admin/usuarios/${user.id}/editar" class="btn btn-edit">Editar</a>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUsers();
+
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    currentPage = 1;
+                    loadUsers(e.target.value);
+                }, 300);
+            });
+        });
+
+        async function loadUsers(search = '') {
+            const loading = document.getElementById('loading');
+            const table = document.getElementById('usersTable');
+            const errorDiv = document.getElementById('errorMessage');
+            const pagination = document.getElementById('paginationControls');
+
+            loading.style.display = 'block';
+            table.style.display = 'none';
+            errorDiv.style.display = 'none';
+            pagination.style.display = 'none';
+
+            try {
+                const queryParams = new URLSearchParams({
+                    page: currentPage,
+                    limit: 5,
+                    q: search
                 });
 
-                document.getElementById('userCount').innerText = `${users.length} usuario${users.length !== 1 ? 's' : ''}`;
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('usersTable').style.display = 'table';
+                const response = await fetch(`/api/usuarios?${queryParams}`);
+                if (!response.ok) throw new Error('Error al cargar usuarios');
+                const data = await response.json();
+
+                const users = data.users;
+                totalPages = data.totalPages;
+                currentPage = data.page;
+
+                const tbody = document.getElementById('usersBody');
+                tbody.innerHTML = '';
+
+                if (users.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 30px;">No se encontraron usuarios</td></tr>';
+                } else {
+                    users.forEach(user => {
+                        const roleClass = `role-${user.rol}`;
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>#${user.id}</strong></td>
+                            <td>
+                                <div class="user-name">${user.nombres} ${user.apellidos}</div>
+                                <div class="user-email">${user.email}</div>
+                            </td>
+                            <td><span class="role-badge ${roleClass}">${user.rol}</span></td>
+                            <td>
+                                <a href="/admin/usuarios/${user.id}/editar" class="btn btn-edit">Editar</a>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+
+                document.getElementById('userCount').innerText = `${data.total} usuario${data.total !== 1 ? 's' : ''}`;
+                document.getElementById('currentPage').innerText = currentPage;
+                document.getElementById('totalPages').innerText = totalPages;
+
+                document.getElementById('prevBtn').disabled = currentPage <= 1;
+                document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+
+                loading.style.display = 'none';
+                table.style.display = 'table';
+                if (totalPages > 1) pagination.style.display = 'flex';
+
             } catch (error) {
-                document.getElementById('loading').style.display = 'none';
-                const errorDiv = document.getElementById('errorMessage');
+                loading.style.display = 'none';
                 errorDiv.innerText = 'Error al cargar los usuarios. Por favor, intente nuevamente.';
                 errorDiv.style.display = 'block';
                 console.error(error);
             }
-        });
+        }
+
+        function changePage(delta) {
+            const newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                const search = document.getElementById('searchInput').value;
+                loadUsers(search);
+            }
+        }
     </script>
 </body>
 
